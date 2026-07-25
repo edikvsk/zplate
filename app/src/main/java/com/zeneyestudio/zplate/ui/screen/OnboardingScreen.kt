@@ -59,7 +59,11 @@ fun OnboardingScreen(
     onComplete: (
         breakfast: TimeHelper.TimeRange,
         lunch: TimeHelper.TimeRange,
-        dinner: TimeHelper.TimeRange
+        dinner: TimeHelper.TimeRange,
+        goalCalories: Int,
+        goalProtein: Int,
+        goalFat: Int,
+        goalCarbs: Int
     ) -> Unit
 ) {
     var step by remember { mutableIntStateOf(0) }
@@ -70,6 +74,12 @@ fun OnboardingScreen(
     var dinnerStart by remember { mutableIntStateOf(16 * 60) }
     var dinnerEnd by remember { mutableIntStateOf(22 * 60) }
 
+    var selectedPreset by remember { mutableIntStateOf(1) }
+    var goalCalories by remember { mutableIntStateOf(2000) }
+    var goalProtein by remember { mutableIntStateOf(80) }
+    var goalFat by remember { mutableIntStateOf(65) }
+    var goalCarbs by remember { mutableIntStateOf(250) }
+
     val mealType = when (step) {
         1 -> "завтрак"
         2 -> "обед"
@@ -77,9 +87,12 @@ fun OnboardingScreen(
     }
     val visual = mealVisual(mealType)
 
+    val stepAccent = if (step == 0 || step == 4) MaterialTheme.colorScheme.primary else visual.accent
+    val stepBg = if (step == 0 || step == 4) MaterialTheme.colorScheme.primaryContainer else visual.background
+
     WellnessBackdrop(
-        accent = if (step == 0) MaterialTheme.colorScheme.primary else visual.accent,
-        topColor = if (step == 0) MaterialTheme.colorScheme.primaryContainer else visual.background,
+        accent = stepAccent,
+        topColor = stepBg,
         modifier = Modifier.fillMaxSize()
     ) {
         Column(
@@ -108,14 +121,14 @@ fun OnboardingScreen(
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        repeat(3) { index ->
+                        repeat(4) { index ->
                             Box(
                                 Modifier
                                     .size(if (index == step - 1) 22.dp else 7.dp, 7.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        if (index == step - 1) visual.accent
-                                        else visual.accent.copy(alpha = .2f)
+                                        if (index == step - 1) stepAccent
+                                        else stepAccent.copy(alpha = .2f)
                                     )
                             )
                         }
@@ -142,6 +155,26 @@ fun OnboardingScreen(
             ) { current ->
                 if (current == 0) {
                     WelcomeContent()
+                } else if (current == 4) {
+                    GoalsContent(
+                        selectedPreset = selectedPreset,
+                        onPresetSelected = { idx ->
+                            selectedPreset = idx
+                            val presets = goalPresets()
+                            goalCalories = presets[idx].calories
+                            goalProtein = presets[idx].protein
+                            goalFat = presets[idx].fat
+                            goalCarbs = presets[idx].carbs
+                        },
+                        goalCalories = goalCalories,
+                        goalProtein = goalProtein,
+                        goalFat = goalFat,
+                        goalCarbs = goalCarbs,
+                        onCaloriesChange = { goalCalories = it; selectedPreset = -1 },
+                        onProteinChange = { goalProtein = it; selectedPreset = -1 },
+                        onFatChange = { goalFat = it; selectedPreset = -1 },
+                        onCarbsChange = { goalCarbs = it; selectedPreset = -1 }
+                    )
                 } else {
                     val start = when (current) {
                         1 -> breakfastStart
@@ -175,7 +208,7 @@ fun OnboardingScreen(
                 }
             }
 
-            val buttonColor = if (step == 0) MaterialTheme.colorScheme.primary else visual.accent
+            val buttonColor = if (step == 0 || step == 4) MaterialTheme.colorScheme.primary else visual.accent
             val buttonContent = if (isSystemInDarkTheme()) {
                 MaterialTheme.colorScheme.background
             } else {
@@ -186,13 +219,17 @@ fun OnboardingScreen(
                     .fillMaxWidth()
                     .height(58.dp)
                     .bouncyClick {
-                        if (step < 3) {
+                        if (step < 4) {
                             step++
                         } else {
                             onComplete(
                                 breakfastStart.toRange(breakfastEnd),
                                 lunchStart.toRange(lunchEnd),
-                                dinnerStart.toRange(dinnerEnd)
+                                dinnerStart.toRange(dinnerEnd),
+                                goalCalories,
+                                goalProtein,
+                                goalFat,
+                                goalCarbs
                             )
                         }
                     },
@@ -205,13 +242,13 @@ fun OnboardingScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (step == 0) "Начать" else if (step < 3) "Продолжить" else "Готово",
+                        text = if (step == 0) "Начать" else if (step < 4) "Продолжить" else "Готово",
                         style = MaterialTheme.typography.titleMedium,
                         color = buttonContent
                     )
                     Spacer(Modifier.size(9.dp))
                     Icon(
-                        imageVector = if (step == 3) Icons.Rounded.Check
+                        imageVector = if (step == 4) Icons.Rounded.Check
                         else Icons.Rounded.KeyboardArrowDown,
                         contentDescription = null,
                         tint = buttonContent,
@@ -348,6 +385,215 @@ private fun TimeControl(
                 )
             }
         }
+    }
+}
+
+private fun goalPresets() = listOf(
+    GoalPreset("Похудение", 1500, 90, 50, 170),
+    GoalPreset("Поддержание", 2000, 80, 65, 250),
+    GoalPreset("Набор массы", 2500, 100, 80, 320)
+)
+
+private data class GoalPreset(val label: String, val calories: Int, val protein: Int, val fat: Int, val carbs: Int)
+
+@Composable
+private fun GoalsContent(
+    selectedPreset: Int,
+    onPresetSelected: (Int) -> Unit,
+    goalCalories: Int,
+    goalProtein: Int,
+    goalFat: Int,
+    goalCarbs: Int,
+    onCaloriesChange: (Int) -> Unit,
+    onProteinChange: (Int) -> Unit,
+    onFatChange: (Int) -> Unit,
+    onCarbsChange: (Int) -> Unit
+) {
+    val presets = goalPresets()
+    val accent = MaterialTheme.colorScheme.primary
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "Ваши цели",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(Modifier.height(5.dp))
+        Text(
+            text = "Сколько калорий в день?",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(20.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            presets.forEachIndexed { index, preset ->
+                val isSelected = selectedPreset == index
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .bouncyClick { onPresetSelected(index) },
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (isSelected) accent.copy(alpha = .12f)
+                    else MaterialTheme.colorScheme.surface.copy(alpha = .96f),
+                    tonalElevation = if (isSelected) 2.dp else 0.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 14.dp, horizontal = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = preset.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isSelected) accent
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${preset.calories}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isSelected) accent
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "ккал",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        WellnessCard(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = .96f)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GoalInputRow(
+                    label = "Калории",
+                    value = goalCalories,
+                    suffix = "ккал",
+                    accent = accent,
+                    onChange = onCaloriesChange,
+                    step = 50
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GoalInputCompact(
+                        label = "Белки",
+                        value = goalProtein,
+                        accent = accent,
+                        onChange = onProteinChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                    GoalInputCompact(
+                        label = "Жиры",
+                        value = goalFat,
+                        accent = accent,
+                        onChange = onFatChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                    GoalInputCompact(
+                        label = "Углеводы",
+                        value = goalCarbs,
+                        accent = accent,
+                        onChange = onCarbsChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoalInputRow(
+    label: String,
+    value: Int,
+    suffix: String,
+    accent: Color,
+    onChange: (Int) -> Unit,
+    step: Int = 5
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = { onChange((value - step).coerceAtLeast(0)) }) {
+            Icon(Icons.Rounded.Remove, contentDescription = "Уменьшить", tint = accent)
+        }
+        Text(
+            text = "$value",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.size(4.dp))
+        Text(
+            text = suffix,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        IconButton(onClick = { onChange(value + step) }) {
+            Icon(Icons.Rounded.Add, contentDescription = "Увеличить", tint = accent)
+        }
+    }
+}
+
+@Composable
+private fun GoalInputCompact(
+    label: String,
+    value: Int,
+    accent: Color,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { onChange((value - 5).coerceAtLeast(0)) }) {
+                Icon(Icons.Rounded.Remove, contentDescription = "Уменьшить", tint = accent, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                text = "$value",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            IconButton(onClick = { onChange(value + 5) }) {
+                Icon(Icons.Rounded.Add, contentDescription = "Увеличить", tint = accent, modifier = Modifier.size(18.dp))
+            }
+        }
+        Text(
+            text = "г",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

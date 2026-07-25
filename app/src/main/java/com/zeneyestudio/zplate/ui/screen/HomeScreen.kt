@@ -21,6 +21,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
@@ -44,6 +46,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -115,6 +118,7 @@ fun HomeScreen(
     currentFat: Float,
     currentCarbs: Float,
     todayLogs: List<DailyLog>,
+    historyLogs: List<DailyLog>,
     meals: List<Meal>,
     mealNutritions: Map<Long, MealNutrition>,
     goalProtein: Int,
@@ -123,7 +127,8 @@ fun HomeScreen(
     currentMealType: String,
     onAddMeal: () -> Unit,
     onDeleteLog: (DailyLog) -> Unit,
-    onDebugMealTypeChange: (String) -> Unit = {}
+    onDebugMealTypeChange: (String) -> Unit = {},
+    onDayClick: (String) -> Unit = {}
 ) {
     val dark = isSystemInDarkTheme()
     var macroExpanded by remember { mutableStateOf(false) }
@@ -215,8 +220,10 @@ fun HomeScreen(
                 if (page == 0) {
                     DailyStatisticsPage(
                         dailyCaloriesByDate = dailyCaloriesByDate,
+                        historyLogs = historyLogs,
                         goalCalories = goalCalories,
-                        accent = accent
+                        accent = accent,
+                        onDayClick = onDayClick
                     )
                 } else if (page == 2) {
                     DailyRationPage(
@@ -387,8 +394,10 @@ private fun DebugMealSwitcher(
 @Composable
 private fun DailyStatisticsPage(
     dailyCaloriesByDate: Map<String, Int>,
+    historyLogs: List<DailyLog>,
     goalCalories: Int,
-    accent: Color
+    accent: Color,
+    onDayClick: (String) -> Unit
 ) {
     var selectedPeriod by remember { mutableIntStateOf(7) }
     val dates = remember(selectedPeriod) {
@@ -399,19 +408,8 @@ private fun DailyStatisticsPage(
     val values = dates.map { date ->
         dailyCaloriesByDate[date.format(DateTimeFormatter.ISO_LOCAL_DATE)] ?: 0
     }
-    val chartMaximum = maxOf(goalCalories, values.maxOrNull() ?: 0, 1)
-    val recordedValues = values.filter { it > 0 }
-    val average = if (recordedValues.isEmpty()) 0 else recordedValues.average().roundToInt()
-    val activeDays = values.count { it > 0 }
-    val daysInGoal = recordedValues.count {
-        it in (goalCalories * .85f).roundToInt()..(goalCalories * 1.15f).roundToInt()
-    }
-    val regularity = (activeDays * 100f / selectedPeriod).roundToInt()
-    val barWidth = when (selectedPeriod) {
-        7 -> 25.dp
-        14 -> 13.dp
-        else -> 5.dp
-    }
+    val columns = 7
+    val rows = dates.chunked(columns)
 
     Column(
         modifier = Modifier
@@ -451,50 +449,103 @@ private fun DailyStatisticsPage(
             }
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(12.dp))
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = .94f)
         ) {
-            Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    StatisticSummary("$average", "среднее", accent)
-                    StatisticSummary("$daysInGoal", "дней в цели", accent)
-                    StatisticSummary("$regularity%", "регулярность", accent)
-                }
-
-                Spacer(Modifier.height(24.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    dates.forEachIndexed { index, date ->
-                        StatisticDayBar(
-                            day = date.dayOfWeek.getDisplayName(
-                                TextStyle.NARROW,
-                                Locale("ru")
-                            ).uppercase().takeIf { selectedPeriod == 7 }
-                                ?: if (index % 5 == 0 || index == dates.lastIndex) {
-                                    date.dayOfMonth.toString()
-                                } else {
-                                    ""
-                                },
-                            value = values[index],
-                            maximum = chartMaximum,
-                            accent = accent,
-                            isToday = index == dates.lastIndex,
-                            width = barWidth,
-                            showValue = selectedPeriod == 7
+                    listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEach { dayName ->
+                        Text(
+                            text = dayName,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                rows.forEach { week ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        week.forEach { date ->
+                            val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                            val calories = dailyCaloriesByDate[dateStr] ?: 0
+                            val isToday = date == LocalDate.now()
+                            val hasData = calories > 0
+                            val inGoal = hasData && calories in (goalCalories * .85f).roundToInt()..(goalCalories * 1.15f).roundToInt()
+                            val overGoal = hasData && calories > (goalCalories * 1.15f).roundToInt()
+
+                            val cellBg = when {
+                                isToday -> accent.copy(alpha = .18f)
+                                inGoal -> Color(0xFF4CAF50).copy(alpha = .12f)
+                                overGoal -> Color(0xFFF44336).copy(alpha = .08f)
+                                hasData -> accent.copy(alpha = .06f)
+                                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .35f)
+                            }
+                            val cellBorder = when {
+                                isToday -> accent
+                                inGoal -> Color(0xFF4CAF50).copy(alpha = .5f)
+                                overGoal -> Color(0xFFF44336).copy(alpha = .3f)
+                                else -> Color.Transparent
+                            }
+
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .bouncyClick { onDayClick(dateStr) },
+                                shape = RoundedCornerShape(10.dp),
+                                color = cellBg,
+                                border = if (isToday || inGoal || overGoal) {
+                                    BorderStroke(1.5.dp, cellBorder)
+                                } else null
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(2.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = "${date.dayOfMonth}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                                        color = when {
+                                            isToday -> accent
+                                            inGoal -> Color(0xFF4CAF50)
+                                            overGoal -> Color(0xFFF44336)
+                                            hasData -> MaterialTheme.colorScheme.onSurface
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .5f)
+                                        }
+                                    )
+                                    if (hasData) {
+                                        Text(
+                                            text = "$calories",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        repeat(columns - week.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                    Spacer(Modifier.height(5.dp))
+                }
             }
         }
+
         Spacer(Modifier.weight(1f))
 
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -541,7 +592,9 @@ private fun StatisticDayBar(
     accent: Color,
     isToday: Boolean,
     width: Dp,
-    showValue: Boolean
+    showValue: Boolean,
+    dateStr: String = "",
+    onDayClick: (String) -> Unit = {}
 ) {
     val targetHeight = (112f * value / maximum).coerceAtLeast(if (value > 0) 7f else 2f).dp
     val animatedHeight by animateDpAsState(
@@ -550,7 +603,10 @@ private fun StatisticDayBar(
         label = "daily calorie bar"
     )
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = Modifier.bouncyClick { if (dateStr.isNotEmpty()) onDayClick(dateStr) },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Text(
             text = if (showValue && value > 0) value.toString() else "",
             style = MaterialTheme.typography.labelSmall,
@@ -771,6 +827,7 @@ private fun DailyRationPage(
 private fun RationMealCard(
     meal: Meal,
     nutrition: MealNutrition?,
+    showDelete: Boolean = true,
     onDelete: () -> Unit
 ) {
     val visual = com.zeneyestudio.zplate.ui.components.mealVisual(meal.mealType)
@@ -814,12 +871,14 @@ private fun RationMealCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Rounded.DeleteOutline,
-                    contentDescription = "Убрать из рациона",
-                    tint = MaterialTheme.colorScheme.error.copy(alpha = .78f)
-                )
+            if (showDelete) {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = "Убрать из рациона",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = .78f)
+                    )
+                }
             }
         }
     }
@@ -1085,6 +1144,163 @@ private fun CalorieRing(
 }
 
 private fun Int?.orZero(): Float = (this ?: 0).toFloat()
+
+@Composable
+fun DayDetailScreen(
+    date: String,
+    dayLogs: List<DailyLog>,
+    meals: List<Meal>,
+    mealNutritions: Map<Long, MealNutrition>,
+    currentCalories: Int,
+    goalCalories: Int,
+    currentProtein: Int,
+    currentFat: Int,
+    currentCarbs: Int,
+    goalProtein: Int,
+    goalFat: Int,
+    goalCarbs: Int,
+    currentMealType: String,
+    accent: Color,
+    onBack: () -> Unit
+) {
+    val mood = moodFor(currentMealType)
+    val parsedDate = remember(date) {
+        LocalDate.parse(date, DateTimeFormatter.ISO_LOCAL_DATE)
+    }
+    val displayDate = remember(parsedDate) {
+        parsedDate.format(DateTimeFormatter.ofPattern("d MMMM", Locale("ru")))
+    }
+    val visibleEntries = dayLogs
+        .sortedWith(
+            compareBy<DailyLog> {
+                when (it.mealType) {
+                    "завтрак" -> 0
+                    "обед" -> 1
+                    "ужин" -> 2
+                    else -> 3
+                }
+            }.thenBy { it.timestamp }
+        )
+        .mapNotNull { log ->
+            meals.find { it.id == log.mealId }?.let { meal ->
+                Triple(log, meal, mealNutritions[meal.id])
+            }
+        }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(mood.backgroundTop, mood.backgroundBottom)
+                )
+            )
+    ) {
+        AtmosphericBackground(mood)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier
+                    .size(44.dp)
+                    .bouncyClick { onBack() },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = .96f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Rounded.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = mood.accent
+                    )
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = displayDate,
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.size(44.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = .92f)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 15.dp, vertical = 13.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                MacroValue("К", currentCalories, goalCalories, mood.accent)
+                MacroValue("Б", currentProtein, goalProtein, Color(0xFF73B991))
+                MacroValue("Ж", currentFat, goalFat, Color(0xFFE58D69))
+                MacroValue("У", currentCarbs, goalCarbs, Color(0xFF929CE0))
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        if (visibleEntries.isEmpty()) {
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                MealArtwork("обед", 138.dp)
+                Text(
+                    text = "Рацион пуст",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                visibleEntries.forEach { (log, meal, nutrition) ->
+                    RationMealCard(
+                        meal = meal,
+                        nutrition = nutrition,
+                        showDelete = false,
+                        onDelete = {}
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(3) {
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = .18f),
+                            CircleShape
+                        )
+                )
+            }
+        }
+    }
+    }
+}
 
 @Composable
 private fun MacroHandle(

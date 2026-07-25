@@ -1,6 +1,7 @@
 package com.zeneyestudio.zplate.ui.navigation
 
 import androidx.compose.runtime.*
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -28,6 +29,7 @@ fun AppNavigation(
     goalFat: Int,
     goalCarbs: Int,
     todayLogs: List<DailyLog>,
+    historyLogs: List<DailyLog>,
     yesterdayLogs: List<DailyLog>,
     allMeals: List<Meal>,
     recentMealIds: List<Long>,
@@ -38,7 +40,7 @@ fun AppNavigation(
     breakfastRange: TimeHelper.TimeRange,
     lunchRange: TimeHelper.TimeRange,
     dinnerRange: TimeHelper.TimeRange,
-    onCompleteOnboarding: (TimeHelper.TimeRange, TimeHelper.TimeRange, TimeHelper.TimeRange) -> Unit,
+    onCompleteOnboarding: (TimeHelper.TimeRange, TimeHelper.TimeRange, TimeHelper.TimeRange, Int, Int, Int, Int) -> Unit,
     onAddMealToDiary: (Long, String) -> Unit,
     onDeleteLog: (DailyLog) -> Unit,
     onCreateMeal: (String, String, List<Pair<Product, Int>>) -> Unit,
@@ -64,8 +66,8 @@ fun AppNavigation(
         // Onboarding
         composable("onboarding") {
             OnboardingScreen(
-                onComplete = { breakfast, lunch, dinner ->
-                    onCompleteOnboarding(breakfast, lunch, dinner)
+                onComplete = { breakfast, lunch, dinner, cal, pro, fat, carbs ->
+                    onCompleteOnboarding(breakfast, lunch, dinner, cal, pro, fat, carbs)
                     navController.navigate("home") {
                         popUpTo("onboarding") { inclusive = true }
                     }
@@ -83,6 +85,7 @@ fun AppNavigation(
                 currentFat = dailyFat,
                 currentCarbs = dailyCarbs,
                 todayLogs = todayLogs,
+                historyLogs = historyLogs,
                 meals = allMeals,
                 mealNutritions = mealNutritions,
                 goalProtein = goalProtein,
@@ -93,7 +96,45 @@ fun AppNavigation(
                     navController.navigate("select_meal")
                 },
                 onDeleteLog = onDeleteLog,
-                onDebugMealTypeChange = onDebugMealTypeChange
+                onDebugMealTypeChange = onDebugMealTypeChange,
+                onDayClick = { date ->
+                    navController.navigate("day_detail/$date")
+                }
+            )
+        }
+
+        // Day detail screen
+        composable(
+            route = "day_detail/{date}",
+            arguments = listOf(navArgument("date") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val date = backStackEntry.arguments?.getString("date") ?: return@composable
+            val dayLogs = historyLogs.filter { it.date == date }
+            val dayCalories = dayLogs.sumOf { log -> mealNutritions[log.mealId]?.calories ?: 0 }
+            val dayProtein = dayLogs.sumOf { log -> (mealNutritions[log.mealId]?.protein ?: 0f).toDouble() }.toFloat()
+            val dayFat = dayLogs.sumOf { log -> (mealNutritions[log.mealId]?.fat ?: 0f).toDouble() }.toFloat()
+            val dayCarbs = dayLogs.sumOf { log -> (mealNutritions[log.mealId]?.carbs ?: 0f).toDouble() }.toFloat()
+
+            DayDetailScreen(
+                date = date,
+                dayLogs = dayLogs,
+                meals = allMeals,
+                mealNutritions = mealNutritions,
+                currentCalories = dayCalories,
+                goalCalories = goalCalories,
+                currentProtein = dayProtein.toInt(),
+                currentFat = dayFat.toInt(),
+                currentCarbs = dayCarbs.toInt(),
+                goalProtein = goalProtein,
+                goalFat = goalFat,
+                goalCarbs = goalCarbs,
+                currentMealType = currentMealType,
+                accent = MaterialTheme.colorScheme.primary,
+                onBack = {
+                    navController.navigate("home") {
+                        popUpTo("home") { inclusive = true }
+                    }
+                }
             )
         }
 

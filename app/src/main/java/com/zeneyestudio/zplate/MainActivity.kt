@@ -124,15 +124,32 @@ fun MainApp(
             .apply()
     }
 
+    fun persistGoals(calories: Int, protein: Int, fat: Int, carbs: Int) {
+        preferences.edit()
+            .putInt("goal_calories", calories)
+            .putInt("goal_protein", protein)
+            .putInt("goal_fat", fat)
+            .putInt("goal_carbs", carbs)
+            .apply()
+    }
+
     var dailyCalories by remember { mutableIntStateOf(0) }
     var dailyProtein by remember { mutableFloatStateOf(0f) }
     var dailyFat by remember { mutableFloatStateOf(0f) }
     var dailyCarbs by remember { mutableFloatStateOf(0f) }
 
-    var goalCalories by remember { mutableIntStateOf(2000) }
-    var goalProtein by remember { mutableIntStateOf(80) }
-    var goalFat by remember { mutableIntStateOf(65) }
-    var goalCarbs by remember { mutableIntStateOf(250) }
+    var goalCalories by remember(preferences) {
+        mutableIntStateOf(preferences.getInt("goal_calories", 2000))
+    }
+    var goalProtein by remember(preferences) {
+        mutableIntStateOf(preferences.getInt("goal_protein", 80))
+    }
+    var goalFat by remember(preferences) {
+        mutableIntStateOf(preferences.getInt("goal_fat", 65))
+    }
+    var goalCarbs by remember(preferences) {
+        mutableIntStateOf(preferences.getInt("goal_carbs", 250))
+    }
     var recentMealIds by remember(preferences) {
         mutableStateOf(preferences.readMealIds("recent_meal_ids"))
     }
@@ -295,6 +312,7 @@ fun MainApp(
         goalFat = goalFat,
         goalCarbs = goalCarbs,
         todayLogs = todayLogs,
+        historyLogs = historyLogs,
         yesterdayLogs = yesterdayLogs,
         allMeals = meals,
         recentMealIds = recentMealIds,
@@ -305,12 +323,17 @@ fun MainApp(
         breakfastRange = breakfastRange,
         lunchRange = lunchRange,
         dinnerRange = dinnerRange,
-        onCompleteOnboarding = { b, l, d ->
+        onCompleteOnboarding = { b, l, d, cal, pro, fat, carbs ->
             isOnboardingComplete = true
             breakfastRange = b
             lunchRange = l
             dinnerRange = d
+            goalCalories = cal
+            goalProtein = pro
+            goalFat = fat
+            goalCarbs = carbs
             persistTimeRanges(b, l, d)
+            persistGoals(cal, pro, fat, carbs)
             preferences.edit().putBoolean("onboarding_complete", true).apply()
         },
         onAddMealToDiary = { mealId, mealType ->
@@ -425,6 +448,7 @@ fun MainApp(
             goalProtein = pro
             goalFat = fat
             goalCarbs = carbs
+            persistGoals(cal, pro, fat, carbs)
         },
         onUpdateTimeRanges = { b, l, d ->
             breakfastRange = b
